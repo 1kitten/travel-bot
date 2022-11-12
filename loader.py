@@ -1,11 +1,7 @@
 from telebot import TeleBot
 from telebot.storage import StateMemoryStorage
-from config_data import config
-from config_data.config import RAPID_API_KEY
+from config_data.config import my_config
+
 
 storage = StateMemoryStorage()
-bot = TeleBot(token=config.BOT_TOKEN, state_storage=storage)
-headers = {
-        "X-RapidAPI-Key": RAPID_API_KEY,
-        "X-RapidAPI-Host": "hotels4.p.rapidapi.com"
-    }
+bot = TeleBot(token=my_config.bot_token, state_storage=storage)

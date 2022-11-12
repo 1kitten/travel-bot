@@ -3,8 +3,8 @@ from datetime import date, timedelta
 from telebot.types import Message, CallbackQuery
 from telegram_bot_calendar import DetailedTelegramCalendar, LSTEP
 
-from hotel_api.api_request import parse_destinations, find_hotels_highprice
-from keyboards.inline.calendar import arrival_keyboard_high, departure_keyboard_high
+from hotel_api.api_request import parse_destinations, find_hotels
+from keyboards.inline.calendar import arrival_keyboard, departure_keyboard
 from keyboards.inline.clarify_destination import keyboard_with_destinations
 from keyboards.reply.hotels_photos import show_photos_or_not
 from loader import bot
@@ -36,13 +36,13 @@ def get_city(message: Message) -> None:
         destinations_ids = parse_destinations(message.text)
         if destinations_ids:
             bot.send_message(message.from_user.id, '🤔 Уточните, пожалуйста:',
-                             reply_markup=keyboard_with_destinations(destinations_ids))
+                             reply_markup=keyboard_with_destinations(destinations_ids, fltr='highprice'))
         else:
             bot.send_message(message.from_user.id, 'По вашему запросу ничего не найдено💀\n'
                                                    'Проверьте правильность написания города.')
 
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith('dist_'))
+@bot.callback_query_handler(func=lambda call: call.data.startswith('highprice'))
 def get_destination(call: CallbackQuery) -> None:
     """
     Колбэк хендлер для отлавливания нажатия пользователя на кнопку клавиатуры.
@@ -52,7 +52,7 @@ def get_destination(call: CallbackQuery) -> None:
     bot.set_state(call.message.chat.id, UserInfoHighPriceState.hotels_to_showHigh)
     bot.send_message(call.message.chat.id, '🏨 Введите количество отелей: ')
     with bot.retrieve_data(call.message.chat.id) as data:
-        data['destinationID'] = call.data.replace('dist_', '')
+        data['destinationID'] = call.data.replace('highprice_', '')
 
 
 @bot.message_handler(state=UserInfoHighPriceState.hotels_to_showHigh)
@@ -70,7 +70,8 @@ def get_hotels_to_show(message: Message) -> None:
             bot.set_state(message.from_user.id, UserInfoHighPriceState.arrival_dateHigh)
             with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
                 data['hotels_to_show'] = int(message.text)
-            bot.send_message(message.from_user.id, '📅 Выберите дату приезда', reply_markup=arrival_keyboard_high())
+            bot.send_message(message.from_user.id, '📅 Выберите дату приезда', reply_markup=arrival_keyboard(
+                keyboard_id=3))
     else:
         bot.send_message(message.from_user.id, '😡 Цифрами, пожалуйста!')
 
@@ -98,7 +99,8 @@ def get_arrival_date(call: CallbackQuery) -> None:
         with bot.retrieve_data(call.message.chat.id) as data:
             data['arrival_date'] = result
         bot.delete_message(call.message.chat.id, call.message.message_id)
-        bot.send_message(call.message.chat.id, '📅 Выберите дату выезда', reply_markup=departure_keyboard_high(call))
+        bot.send_message(call.message.chat.id, '📅 Выберите дату выезда', reply_markup=departure_keyboard(call,
+                                                                                                         keyboard_id=4))
 
 
 @bot.callback_query_handler(func=DetailedTelegramCalendar.func(calendar_id=4))
@@ -148,7 +150,7 @@ def get_or_not_photos(message: Message) -> None:
         with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
             data['show_photo'] = False
             data['photos_to_show'] = 0
-        find_hotels_highprice(message)
+        find_hotels(message, sort_type='PRICE_HIGHEST_FIRST')
         bot.delete_state(message.from_user.id, message.chat.id)
 
 
@@ -167,5 +169,7 @@ def get_photos(message: Message) -> None:
         else:
             with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
                 data['photos_to_show'] = int(message.text)
-            find_hotels_highprice(message)
+            find_hotels(message, sort_type='PRICE_HIGHEST_FIRST')
             bot.delete_state(message.from_user.id, message.chat.id)
+    else:
+        bot.send_message(message.from_user.id, '😡 Цифрами, пожалуйста!')

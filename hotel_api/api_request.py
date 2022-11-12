@@ -5,7 +5,8 @@ from typing import Dict, Optional
 import requests
 from telebot.types import InputMediaPhoto, Message
 
-from loader import bot, headers
+from config_data.config import headers, url_destinations, url_for_photos, url_for_hotels_id_list
+from loader import bot
 
 
 def request_to_api(url: str, headers: dict, querystring: dict) -> Optional[str]:
@@ -23,7 +24,7 @@ def request_to_api(url: str, headers: dict, querystring: dict) -> Optional[str]:
             return response.text
     except Exception as exc:
         print('Произошла ошибка: {}'.format(exc))
-        return None
+        return
 
 
 def parse_destinations(city_name: str) -> Dict[str, str]:
@@ -33,9 +34,8 @@ def parse_destinations(city_name: str) -> Dict[str, str]:
     :param city_name: город, который ввёл пользователь боту.
     :return destinations_ids: словарь, где "Наименование места: Номер назначения".
     """
-    url = 'https://hotels4.p.rapidapi.com/locations/v2/search'
     query = {'query': city_name, 'locate': 'en_EN', 'currency': 'USD'}
-    response = request_to_api(url, headers, query)
+    response = request_to_api(url_destinations, headers, query)
 
     if response:
         result = json.loads(response)['suggestions'][0]['entities']
@@ -56,12 +56,10 @@ def get_photo(message: Message) -> None:
     :param message: сообщение пользователя, оно нужно, чтобы взять его id
     и обратиться к data['list_of_hotels'].
     """
-    url = 'https://hotels4.p.rapidapi.com/properties/get-hotel-photos'
-
     with bot.retrieve_data(message.chat.id) as data:
         for hotel in data['list_of_hotels']:
             query = {'id': hotel}
-            response_for_hotels_photo = request_to_api(url=url, headers=headers, querystring=query)
+            response_for_hotels_photo = request_to_api(url=url_for_photos, headers=headers, querystring=query)
             if response_for_hotels_photo:
                 result_of_photos = json.loads(response_for_hotels_photo)['roomImages'][0]['images'][0:data[
                     'photos_to_show']]
@@ -71,7 +69,7 @@ def get_photo(message: Message) -> None:
                     data['list_of_hotels'][hotel]['photos'].append(photo_url)
 
 
-def find_hotels_lowprice(message: Message) -> None:
+def find_hotels(message: Message, sort_type: str = 'PRICE') -> None:
     """
     Функция нахождения отелей по низкой цене с параметрами пользователя.
     Собираем все критерии для поиска в отдельные переменные.
@@ -80,11 +78,10 @@ def find_hotels_lowprice(message: Message) -> None:
     Если пользователь не желает просматривать фотографии отелей, то просто
     выводим информацию о каждом отеле.
     Если пользователь хочет посмотреть фотографии отелей, то вызывается функция get_photo.
+    :param sort_type: (str) тип сортировки.
     :param message: (Message) сообщение пользователя, нужно для обращения к его id, чтобы взять
     оттуда параметры для запроса.
     """
-    url_for_hotels_id_list = 'https://hotels4.p.rapidapi.com/properties/list'
-
     with bot.retrieve_data(message.chat.id) as data:
         user_destinationid = data['destinationID']
         user_show_photo = data['show_photo']
@@ -98,13 +95,14 @@ def find_hotels_lowprice(message: Message) -> None:
              "checkIn": user_arrival_date,
              "checkOut": user_departure_date,
              "adults1": "1",
-             "sortOrder": "PRICE",
+             "sortOrder": sort_type,
              "locale": "en_EN",
              "currency": "USD",
              }
 
     response_hotels_id_list = request_to_api(url=url_for_hotels_id_list, headers=headers, querystring=query)
     if response_hotels_id_list:
+        bot.send_message(message.from_user.id, '🔍 Ищу подходящие отели...')
         result_for_hotels_id = json.loads(response_hotels_id_list)['data']['body']['searchResults']['results']
         if result_for_hotels_id:
             with bot.retrieve_data(message.chat.id) as data:
@@ -116,21 +114,30 @@ def find_hotels_lowprice(message: Message) -> None:
                                                'price_for_certain_period': int(re.sub(r'[^0-9]+', '',
                                                                                       i['ratePlan']['price'].get(
                                                                                           'current'))),
+                                               'full_bundle_price': re.findall(r'\$[0-9,]{0,}',
+                                                                               i['ratePlan']['price'].get(
+                                                                                   'fullyBundledPricePerStay',
+                                                                                   'Not found')),
                                                "photos": []
                                                } for i in result_for_hotels_id
                                           }
-                user_lowprice_hotels_list = data['list_of_hotels']
+                user_hotels_list = data['list_of_hotels']
             if not user_show_photo:
-                for hotel in user_lowprice_hotels_list:
+                for hotel in user_hotels_list:
                     bot.send_message(message.chat.id,
-                                     f"🏨 Отель: {user_lowprice_hotels_list[hotel]['hotel_name']}\n"
-                                     f"🔗 Ссылка: {user_lowprice_hotels_list[hotel]['hotel_website']}\n"
-                                     f"🗺️ Адрес: {user_lowprice_hotels_list[hotel]['hotel_address']}\n"
-                                     f"📍 До центра: {user_lowprice_hotels_list[hotel]['distance_from_center']}\n"
+                                     f"🏨 Отель: {user_hotels_list[hotel]['hotel_name']}\n"
+                                     f"🔗 Ссылка: {user_hotels_list[hotel]['hotel_website']}\n"
+                                     f"🗺️ Адрес: {user_hotels_list[hotel]['hotel_address']}\n"
+                                     f"📍 До центра: {user_hotels_list[hotel]['distance_from_center']}\n"
                                      f"📅 Период проживания: с {user_arrival_date} по {user_departure_date}\n"
-                                     f"💵 Цена: {user_lowprice_hotels_list[hotel]['price_for_certain_period']} $ (USD)",
+                                     f"💵 Цена: ${user_hotels_list[hotel]['price_for_certain_period']}\n"
+                                     f"💵 Цена за период проживания: "
+                                     f"{''.join(user_hotels_list[hotel]['full_bundle_price'])}",
                                      disable_web_page_preview=True
                                      )
+                bot.send_message(message.from_user.id, '❤ По вашему запросу было найдено {} результата'.format(
+                    len(user_hotels_list)
+                ))
             else:
                 get_photo(message)
                 with bot.retrieve_data(message.chat.id) as data:
@@ -140,96 +147,117 @@ def find_hotels_lowprice(message: Message) -> None:
                                f"🗺️ Адрес: {data['list_of_hotels'][hotel]['hotel_address']}\n" \
                                f"📍 До центра: {data['list_of_hotels'][hotel]['distance_from_center']}\n" \
                                f"📅 Период проживания: с {user_arrival_date} по {user_departure_date}\n" \
-                               f"💵 Цена: {data['list_of_hotels'][hotel]['price_for_certain_period']} $ (USD)"
+                               f"💵 Цена: ${data['list_of_hotels'][hotel]['price_for_certain_period']}\n" \
+                               f"💵 Цена за период проживания: " \
+                               f"{''.join(data['list_of_hotels'][hotel]['full_bundle_price'])}"
 
                         photos = [InputMediaPhoto(media=url, caption=text) if num == 0
                                   else InputMediaPhoto(media=url)
                                   for num, url in enumerate(data['list_of_hotels'][hotel]['photos'])]
 
                         bot.send_media_group(message.chat.id, photos)
+                bot.send_message(message.from_user.id, '❤ По вашему запросу было найдено {} результата'.format(
+                    len(user_hotels_list)
+                ))
         else:
             bot.send_message(message.chat.id, '😭 По вашему запросу ничего не найдено.')
 
 
-def find_hotels_highprice(message: Message) -> None:
+def find_bestdeal(message: Message) -> None:
     """
-    Функция нахождения отелей по высокой цене с параметрами пользователя.
+    Функция нахождения отелей по параметрам, заданным пользователем.
     Собираем все критерии для поиска в отдельные переменные.
     Отправляем соответствующий запрос к API и получаем результат.
     Далее обрабатываем этот результат и записываем в data['list_of_hotels'].
     Если пользователь не желает просматривать фотографии отелей, то просто
     выводим информацию о каждом отеле.
     Если пользователь хочет посмотреть фотографии отелей, то вызывается функция get_photo.
-    :param message: (Message) сообщение пользователя, нужно для обращения к его id, чтобы взять
-    оттуда параметры для запроса.
+    :param message: (Message) сообщение пользователя, нужно для обращения к его id.
     """
-    url_for_hotels_id_list = 'https://hotels4.p.rapidapi.com/properties/list'
+    with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
+        user_destination = data['destinationID']
+        user_max_price = data['max_price']
+        user_min_price = data['min_price']
+        user_center_distance = data['distance_from_center']
+        user_total_hotels = data['hotels_to_show']
+        user_arrival_date = data['arrival_date']
+        user_departure_date = data['departure_date']
+        user_show_photo = data['show_photo']
 
-    with bot.retrieve_data(message.chat.id) as data:
-        print(data)
-        user_destinationid_hp = data['destinationID']
-        user_show_photo_hp = data['show_photo']
-        user_total_hotels_hp = data['hotels_to_show']
-        user_arrival_date_hp = data['arrival_date']
-        user_departure_date_hp = data['departure_date']
+    query = {"destinationId": user_destination,
+             "pageNumber": "1",
+             "pageSize": user_total_hotels,
+             "checkIn": user_arrival_date,
+             "checkOut": user_departure_date,
+             "adults1": "1",
+             "priceMin": user_min_price,
+             "priceMax": user_max_price,
+             "sortOrder": "DISTANCE_FROM_LANDMARK",
+             "locale": "en_US",
+             "currency": "USD",
+             "landmarkIds": f"City center {user_center_distance}"
+             }
 
-    query_hp = {"destinationId": user_destinationid_hp,
-                "pageNumber": "1",
-                "pageSize": user_total_hotels_hp,
-                "checkIn": user_arrival_date_hp,
-                "checkOut": user_departure_date_hp,
-                "adults1": "1",
-                "sortOrder": "PRICE_HIGHEST_FIRST",
-                "locale": "en_EN",
-                "currency": "USD",
+    response = request_to_api(url=url_for_hotels_id_list, headers=headers, querystring=query)
+    if response:
+        bot.send_message(message.from_user.id, '🔍 Ищу подходящие отели...')
+        hotels_result = json.loads(response)['data']['body']['searchResults']['results']
+        if hotels_result:
+            with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
+                data['list_of_hotels'] = {i.get('id'):
+                    {
+                        'hotel_name': i.get('name'),
+                        'hotel_address': i['address'].get('streetAddress'),
+                        'distance_from_center': i['landmarks'][0].get('distance'),
+                        'hotel_website': f'https://hotels.com/ho{i.get("id")}',
+                        'price_for_certain_period': re.sub(r'[^0-9]+', '',
+                                                           i['ratePlan']['price'].get(
+                                                               'current')),
+                        'full_bundle_price': re.findall(r'\$[0-9,]{0,}',
+                                                        i['ratePlan']['price'].get(
+                                                            'fullyBundledPricePerStay', 'Not found')),
+                        'photos': []
+                    } for i in hotels_result if
+                    re.sub(r' miles', '', i['landmarks'][0].get('distance')) <= str(user_center_distance)
                 }
 
-    response_hotels_id_list = request_to_api(url=url_for_hotels_id_list, headers=headers, querystring=query_hp)
-    if response_hotels_id_list:
-        result_for_hotels_id = json.loads(response_hotels_id_list)['data']['body']['searchResults']['results']
-        if result_for_hotels_id:
-            print(result_for_hotels_id)
-            with bot.retrieve_data(message.chat.id) as data:
-                data['list_of_hotels'] = {i.get('id'):
-                                              {'hotel_name': i.get('name'),
-                                               'hotel_address': i['address'].get('streetAddress'),
-                                               "distance_from_center": i["landmarks"][0].get("distance"),
-                                               "hotel_website": f"https://hotels.com/ho{i.get('id')}",
-                                               'price_for_certain_period': int(re.sub(r'[^0-9]+', '',
-                                                                                      i['ratePlan']['price'].get(
-                                                                                          'current'))),
-                                               "photos": []
-                                               } for i in result_for_hotels_id
-                                          }
-                user_highprice_hotels_list = data['list_of_hotels']
-                print(len(user_highprice_hotels_list))
-            if not user_show_photo_hp:
-                for hotel in user_highprice_hotels_list:
+                hotels_list = data['list_of_hotels']
+            if not user_show_photo:
+                for i_hotel in hotels_list:
                     bot.send_message(message.chat.id,
-                                     f"🏨 Отель: {user_highprice_hotels_list[hotel]['hotel_name']}\n"
-                                     f"🔗 Ссылка: {user_highprice_hotels_list[hotel]['hotel_website']}\n"
-                                     f"🗺️ Адрес: {user_highprice_hotels_list[hotel]['hotel_address']}\n"
-                                     f"📍 До центра: {user_highprice_hotels_list[hotel]['distance_from_center']}\n"
-                                     f"📅 Период проживания: с {user_arrival_date_hp} по {user_departure_date_hp}\n"
-                                     f"💵 Цена: {user_highprice_hotels_list[hotel]['price_for_certain_period']} $ (USD)",
+                                     f"🏨 Отель: {hotels_list[i_hotel]['hotel_name']}\n"
+                                     f"🔗 Ссылка: {hotels_list[i_hotel]['hotel_website']}\n"
+                                     f"🗺️ Адрес: {hotels_list[i_hotel]['hotel_address']}\n"
+                                     f"📍 До центра: {hotels_list[i_hotel]['distance_from_center']}\n"
+                                     f"📅 Период проживания: с {user_arrival_date} по {user_departure_date}\n"
+                                     f"💵 Цена за ночь: ${hotels_list[i_hotel]['price_for_certain_period']}\n"
+                                     f"💵 Цена за период проживания: "
+                                     f"{''.join(hotels_list[i_hotel]['full_bundle_price'])}",
                                      disable_web_page_preview=True
                                      )
+                bot.send_message(message.from_user.id, '❤ По вашему запросу было найдено {} результата'.format(
+                    len(hotels_list)
+                ))
             else:
                 get_photo(message)
-                with bot.retrieve_data(message.chat.id) as data:
-                    for hotel in data['list_of_hotels']:
-                        text = f"🏨 Отель: {data['list_of_hotels'][hotel]['hotel_name']}\n" \
-                               f"🔗 Ссылка: {data['list_of_hotels'][hotel]['hotel_website']}\n" \
-                               f"🗺️ Адрес: {data['list_of_hotels'][hotel]['hotel_address']}\n" \
-                               f"📍 До центра: {data['list_of_hotels'][hotel]['distance_from_center']}\n" \
-                               f"📅 Период проживания: с {user_arrival_date_hp} по {user_departure_date_hp}\n" \
-                               f"💵 Цена: {data['list_of_hotels'][hotel]['price_for_certain_period']} $ (USD)"
+                with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
+                    for i_hotel in data['list_of_hotels']:
+                        text = f"🏨 Отель: {hotels_list[i_hotel]['hotel_name']}\n" \
+                               f"🔗 Ссылка: {hotels_list[i_hotel]['hotel_website']}\n" \
+                               f"🗺️ Адрес: {hotels_list[i_hotel]['hotel_address']}\n" \
+                               f"📍 До центра: {hotels_list[i_hotel]['distance_from_center']}\n" \
+                               f"📅 Период проживания: с {user_arrival_date} по {user_departure_date}\n" \
+                               f"💵 Цена за ночь: ${hotels_list[i_hotel]['price_for_certain_period']}\n" \
+                               f"💵 Цена за период проживания: " \
+                               f"{''.join(hotels_list[i_hotel]['full_bundle_price'])}"
 
                         photos = [InputMediaPhoto(media=url, caption=text) if num == 0
-                                  else InputMediaPhoto(media=url) for num, url in enumerate(
-                            data['list_of_hotels'][hotel]['photos']
-                        )]
+                                  else InputMediaPhoto(media=url)
+                                  for num, url in enumerate(data['list_of_hotels'][i_hotel]['photos'])]
 
                         bot.send_media_group(message.chat.id, photos)
+                bot.send_message(message.from_user.id, '❤ По вашему запросу было найдено {} результата'.format(
+                    len(hotels_list)
+                ))
         else:
-            bot.send_message(message.chat.id, '😭 По вашему запросу ничего не найдено.')
+            bot.send_message(message.from_user.id, '😭 По вашему запросу ничего не найдено.')

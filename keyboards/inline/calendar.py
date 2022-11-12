@@ -6,12 +6,13 @@ from telegram_bot_calendar import DetailedTelegramCalendar
 from loader import bot
 
 
-def arrival_keyboard() -> DetailedTelegramCalendar:
+def arrival_keyboard(keyboard_id: int) -> DetailedTelegramCalendar:
     """
     Клавиатура для выбора даты приезда с ID=1.
+    :param keyboard_id: (int) Номер клавиатуры.
     :return calendar: (DetailedTelegramCalendar) клавиатура.
     """
-    calendar, step = DetailedTelegramCalendar(calendar_id=1,
+    calendar, step = DetailedTelegramCalendar(calendar_id=keyboard_id,
                                               current_date=date.today(),
                                               min_date=date.today(),
                                               max_date=date.today() + timedelta(days=365),
@@ -19,9 +20,10 @@ def arrival_keyboard() -> DetailedTelegramCalendar:
     return calendar
 
 
-def departure_keyboard(call: CallbackQuery) -> DetailedTelegramCalendar:
+def departure_keyboard(call: CallbackQuery, keyboard_id: int) -> DetailedTelegramCalendar:
     """
     Клавиатура для выбора даты выезда с ID=2.
+    :param keyboard_id: (id). Номер клавиатуры
     :param call: (CallbackQuery) из него мы берём id пользователя, чтобы оттуда
     взять дату приезда и по ней уже создать клавиатуру с датой выезда.
     :return calendar: (DetailedTelegramCalendar) клавиатура.
@@ -29,37 +31,7 @@ def departure_keyboard(call: CallbackQuery) -> DetailedTelegramCalendar:
     with bot.retrieve_data(call.message.chat.id) as data:
         user_arrival_date = data['arrival_date']
 
-    calendar, step = DetailedTelegramCalendar(calendar_id=2,
-                                              min_date=user_arrival_date + timedelta(days=1),
-                                              max_date=user_arrival_date + timedelta(days=365),
-                                              locale="ru").build()
-    return calendar
-
-
-def arrival_keyboard_high() -> DetailedTelegramCalendar:
-    """
-    Клавиатура для выбора даты приезда с ID=3.
-    :return calendar: (DetailedTelegramCalendar) клавиатура.
-    """
-    calendar, step = DetailedTelegramCalendar(calendar_id=3,
-                                              current_date=date.today(),
-                                              min_date=date.today(),
-                                              max_date=date.today() + timedelta(days=365),
-                                              locale="ru").build()
-    return calendar
-
-
-def departure_keyboard_high(call: CallbackQuery) -> DetailedTelegramCalendar:
-    """
-    Клавиатура для выбора даты выезда с ID=4.
-    :param call: (CallbackQuery) из него мы берём id пользователя, чтобы оттуда
-    взять дату приезда и по ней уже создать клавиатуру с датой выезда.
-    :return calendar: (DetailedTelegramCalendar) клавиатура.
-    """
-    with bot.retrieve_data(call.message.chat.id) as data:
-        user_arrival_date = data['arrival_date']
-
-    calendar, step = DetailedTelegramCalendar(calendar_id=4,
+    calendar, step = DetailedTelegramCalendar(calendar_id=keyboard_id,
                                               min_date=user_arrival_date + timedelta(days=1),
                                               max_date=user_arrival_date + timedelta(days=365),
                                               locale="ru").build()
