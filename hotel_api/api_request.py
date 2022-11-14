@@ -7,6 +7,7 @@ from telebot.types import InputMediaPhoto, Message
 
 from config_data.config import headers, url_destinations, url_for_photos, url_for_hotels_id_list
 from loader import bot
+from database.travel_database import add_new_value
 
 
 def request_to_api(url: str, headers: dict, querystring: dict) -> Optional[str]:
@@ -61,9 +62,16 @@ def get_photo(message: Message) -> None:
             query = {'id': hotel}
             response_for_hotels_photo = request_to_api(url=url_for_photos, headers=headers, querystring=query)
             if response_for_hotels_photo:
-                result_of_photos = json.loads(response_for_hotels_photo)['roomImages'][0]['images'][0:data[
-                    'photos_to_show']]
-
+                try:
+                    length_of_photos = len(json.loads(response_for_hotels_photo)['roomImages'][0]['images'])
+                    if length_of_photos > data['photos_to_show']:
+                        result_of_photos = json.loads(response_for_hotels_photo)['roomImages'][0]['images'][0:data[
+                            'photos_to_show']]
+                    else:
+                        result_of_photos = json.loads(response_for_hotels_photo)['roomImages'][0]['images'][
+                                           0:length_of_photos]
+                except Exception:
+                    result_of_photos = [json.loads(response_for_hotels_photo)['hotelImages'][0]]
                 for photo in result_of_photos:
                     photo_url = photo['baseUrl'].format(size="z")
                     data['list_of_hotels'][hotel]['photos'].append(photo_url)
@@ -88,6 +96,9 @@ def find_hotels(message: Message, sort_type: str = 'PRICE') -> None:
         user_total_hotels = data['hotels_to_show']
         user_arrival_date = data['arrival_date']
         user_departure_date = data['departure_date']
+        user_id = data['user_id']
+        request_date = data['request_date']
+        user_command = data['user_command']
 
     query = {"destinationId": user_destinationid,
              "pageNumber": "1",
@@ -135,6 +146,7 @@ def find_hotels(message: Message, sort_type: str = 'PRICE') -> None:
                                      f"{''.join(user_hotels_list[hotel]['full_bundle_price'])}",
                                      disable_web_page_preview=True
                                      )
+                    add_new_value(user_id, user_command, request_date, user_hotels_list[hotel]['hotel_website'])
                 bot.send_message(message.from_user.id, '❤ По вашему запросу было найдено {} результата'.format(
                     len(user_hotels_list)
                 ))
@@ -156,6 +168,7 @@ def find_hotels(message: Message, sort_type: str = 'PRICE') -> None:
                                   for num, url in enumerate(data['list_of_hotels'][hotel]['photos'])]
 
                         bot.send_media_group(message.chat.id, photos)
+                        add_new_value(user_id, user_command, request_date, user_hotels_list[hotel]['hotel_website'])
                 bot.send_message(message.from_user.id, '❤ По вашему запросу было найдено {} результата'.format(
                     len(user_hotels_list)
                 ))
@@ -183,6 +196,9 @@ def find_bestdeal(message: Message) -> None:
         user_arrival_date = data['arrival_date']
         user_departure_date = data['departure_date']
         user_show_photo = data['show_photo']
+        user_id = data['user_id']
+        request_date = data['request_date']
+        user_command = data['user_command']
 
     query = {"destinationId": user_destination,
              "pageNumber": "1",
@@ -235,6 +251,7 @@ def find_bestdeal(message: Message) -> None:
                                      f"{''.join(hotels_list[i_hotel]['full_bundle_price'])}",
                                      disable_web_page_preview=True
                                      )
+                    add_new_value(user_id, user_command, request_date, hotels_list[i_hotel]['hotel_website'])
                 bot.send_message(message.from_user.id, '❤ По вашему запросу было найдено {} результата'.format(
                     len(hotels_list)
                 ))
@@ -256,6 +273,7 @@ def find_bestdeal(message: Message) -> None:
                                   for num, url in enumerate(data['list_of_hotels'][i_hotel]['photos'])]
 
                         bot.send_media_group(message.chat.id, photos)
+                        add_new_value(user_id, user_command, request_date, hotels_list[i_hotel]['hotel_website'])
                 bot.send_message(message.from_user.id, '❤ По вашему запросу было найдено {} результата'.format(
                     len(hotels_list)
                 ))

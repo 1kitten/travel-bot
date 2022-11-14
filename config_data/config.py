@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv, find_dotenv
 from dataclasses import dataclass
+import enum
 
 if not find_dotenv():
     exit('Переменные окружения не загружены т.к отсутствует файл .env')
@@ -24,7 +25,8 @@ my_config = BotConfig(
         ('hello', 'Поздороваться'),
         ('lowprice', 'Вывод самых дешевых отелей'),
         ('highprice', 'Вывод самых дорогих отелей'),
-        ('bestdeal', 'Вывод отелей, наиболее подходящих по цене и расположению от центра')
+        ('bestdeal', 'Вывод отелей, наиболее подходящих по цене и расположению от центра'),
+        ('history', 'Вывод истории поиска отелей')
     )
 )
 
@@ -36,3 +38,12 @@ headers = {
 url_destinations = 'https://hotels4.p.rapidapi.com/locations/v2/search'
 url_for_photos = 'https://hotels4.p.rapidapi.com/properties/get-hotel-photos'
 url_for_hotels_id_list = 'https://hotels4.p.rapidapi.com/properties/list'
+
+
+class KeyboardStatus(enum.Enum):
+    lowprice_arrival = 1
+    lowprice_departure = 2
+    highprice_arrival = 3
+    highprice_departure = 4
+    bestdeal_arrival = 5
+    bestdeal_departure = 6

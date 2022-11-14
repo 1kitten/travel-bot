@@ -1,8 +1,9 @@
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 
 from telebot.types import Message, CallbackQuery
 from telegram_bot_calendar import DetailedTelegramCalendar, LSTEP
 
+from config_data.config import KeyboardStatus
 from hotel_api.api_request import parse_destinations, find_hotels
 from keyboards.inline.calendar import arrival_keyboard, departure_keyboard
 from keyboards.inline.clarify_destination import keyboard_with_destinations
@@ -33,6 +34,9 @@ def get_city(message: Message) -> None:
     bot.set_state(message.from_user.id, UserInfoHighPriceState.destinationHigh, message.chat.id)
     with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
         data['city'] = message.text
+        data['user_id'] = message.from_user.id
+        data['user_command'] = '/highprice'
+        data['request_date'] = datetime.now()
         destinations_ids = parse_destinations(message.text)
         if destinations_ids:
             bot.send_message(message.from_user.id, '🤔 Уточните, пожалуйста:',
@@ -71,12 +75,12 @@ def get_hotels_to_show(message: Message) -> None:
             with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
                 data['hotels_to_show'] = int(message.text)
             bot.send_message(message.from_user.id, '📅 Выберите дату приезда', reply_markup=arrival_keyboard(
-                keyboard_id=3))
+                keyboard_id=KeyboardStatus.highprice_arrival.value))
     else:
         bot.send_message(message.from_user.id, '😡 Цифрами, пожалуйста!')
 
 
-@bot.callback_query_handler(func=DetailedTelegramCalendar.func(calendar_id=3))
+@bot.callback_query_handler(func=DetailedTelegramCalendar.func(calendar_id=KeyboardStatus.highprice_arrival.value))
 def get_arrival_date(call: CallbackQuery) -> None:
     """
     Хендлер, который отлавливает нажатие пользователя на кнопку клавиатуры под id=3.
@@ -85,7 +89,7 @@ def get_arrival_date(call: CallbackQuery) -> None:
     :param call: (CallbackQuery) колл пользователя с информацией о дате приезда.
     """
     bot.set_state(call.message.chat.id, UserInfoHighPriceState.departure_dateHigh)
-    result, key, step = DetailedTelegramCalendar(calendar_id=3,
+    result, key, step = DetailedTelegramCalendar(calendar_id=KeyboardStatus.highprice_arrival.value,
                                                  current_date=date.today(),
                                                  min_date=date.today(),
                                                  max_date=date.today() + timedelta(days=365),
@@ -99,11 +103,11 @@ def get_arrival_date(call: CallbackQuery) -> None:
         with bot.retrieve_data(call.message.chat.id) as data:
             data['arrival_date'] = result
         bot.delete_message(call.message.chat.id, call.message.message_id)
-        bot.send_message(call.message.chat.id, '📅 Выберите дату выезда', reply_markup=departure_keyboard(call,
-                                                                                                         keyboard_id=4))
+        bot.send_message(call.message.chat.id, '📅 Выберите дату выезда',
+                         reply_markup=departure_keyboard(call, keyboard_id=KeyboardStatus.highprice_departure.value))
 
 
-@bot.callback_query_handler(func=DetailedTelegramCalendar.func(calendar_id=4))
+@bot.callback_query_handler(func=DetailedTelegramCalendar.func(calendar_id=KeyboardStatus.highprice_departure.value))
 def get_departure_date(call: CallbackQuery) -> None:
     """
     Хендлер, который отлавливает нажатие пользователя на кнопку клавиатуры с id=4.
@@ -114,7 +118,7 @@ def get_departure_date(call: CallbackQuery) -> None:
     bot.set_state(call.message.chat.id, UserInfoHighPriceState.show_photoHigh)
     with bot.retrieve_data(call.message.chat.id) as data:
         user_arrival_date = data['arrival_date']
-    result, key, step = DetailedTelegramCalendar(calendar_id=4,
+    result, key, step = DetailedTelegramCalendar(calendar_id=KeyboardStatus.highprice_departure.value,
                                                  min_date=user_arrival_date + timedelta(days=1),
                                                  max_date=user_arrival_date + timedelta(days=365),
                                                  locale="ru").process(call.data)

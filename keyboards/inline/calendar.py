@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from typing import Any
 
 from telebot.types import CallbackQuery
 from telegram_bot_calendar import DetailedTelegramCalendar
@@ -6,7 +7,7 @@ from telegram_bot_calendar import DetailedTelegramCalendar
 from loader import bot
 
 
-def arrival_keyboard(keyboard_id: int) -> DetailedTelegramCalendar:
+def arrival_keyboard(keyboard_id: Any) -> DetailedTelegramCalendar:
     """
     Клавиатура для выбора даты приезда с ID=1.
     :param keyboard_id: (int) Номер клавиатуры.
@@ -20,7 +21,7 @@ def arrival_keyboard(keyboard_id: int) -> DetailedTelegramCalendar:
     return calendar
 
 
-def departure_keyboard(call: CallbackQuery, keyboard_id: int) -> DetailedTelegramCalendar:
+def departure_keyboard(call: CallbackQuery, keyboard_id: Any) -> DetailedTelegramCalendar:
     """
     Клавиатура для выбора даты выезда с ID=2.
     :param keyboard_id: (id). Номер клавиатуры
